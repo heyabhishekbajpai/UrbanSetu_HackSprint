@@ -84,8 +84,8 @@ A modern, AI-powered civic issue reporting and resolution platform designed for 
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd urbansetu
+   git clone https://github.com/heyabhishekbajpai/UrbanSetu_HackSprint.git
+   cd UrbanSetu_HackSprint
    ```
 
 2. **Install dependencies**
@@ -93,12 +93,12 @@ A modern, AI-powered civic issue reporting and resolution platform designed for 
    npm install
    ```
 
-4. **Start development server**
+3. **Start development server**
    ```bash
    npm start
    ```
 
-5. **Build for production**
+4. **Build for production**
    ```bash
    npm run build
    ```
