@@ -20,6 +20,8 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { format } from 'date-fns';
+import { getUserComplaints, getComplaintStats } from '../../services/complaintService';
+import toast from 'react-hot-toast';
 
 const CitizenDashboard = () => {
   const { user, logout } = useAuth();
@@ -41,105 +43,78 @@ const CitizenDashboard = () => {
     window.scrollTo(0, 0);
   }, []);
 
-  // Mock data - replace with actual API calls
+  // Load complaints from Supabase
   useEffect(() => {
-    // Simulate loading complaints
-    const mockComplaints = [
-      {
-        id: '1',
-        title: 'Pothole on Main Road',
-        description: 'Large pothole causing traffic issues',
-        status: 'resolved',
-        priority: 'high',
-        category: 'Pothole',
-        location: 'Main Road, Sector 15',
-        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-        resolvedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-        image: 'https://raw.githubusercontent.com/heyabhishekbajpai/UrbanSetu/main/public/pothole.jpg'
-      },
-      {
-        id: '2',
-        title: 'Broken Street Light',
-        description: 'Street light not working near park',
-        status: 'in_progress',
-        priority: 'medium',
-        category: 'StreetLight',
-        location: 'Park Road, Sector 12',
-        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-        image: 'https://raw.githubusercontent.com/heyabhishekbajpai/UrbanSetu/main/public/streetlight.jpg'
-      },
-      {
-        id: '3',
-        title: 'Garbage Accumulation',
-        description: 'Garbage not being collected regularly',
-        status: 'pending',
-        priority: 'high',
-        category: 'Garbage',
-        location: 'Residential Area, Sector 8',
-        createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-        image: 'https://raw.githubusercontent.com/heyabhishekbajpai/UrbanSetu/main/public/garbage.png'
-      },
-      {
-        id: '4',
-        title: 'Water Leakage',
-        description: 'Water pipe burst causing flooding in the area',
-        status: 'registered',
-        priority: 'urgent',
-        category: 'Water',
-        location: 'Near Community Center, Sector 5',
-        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        image: 'https://raw.githubusercontent.com/heyabhishekbajpai/UrbanSetu/main/public/water.jpg'
-      }
-    ];
+    const loadComplaints = async () => {
+      if (!user || !user.id) return;
 
-    setRecentComplaints(mockComplaints);
-    setStats({
-      total: 5, // Changed from mockComplaints.length to 5
-      resolved: mockComplaints.filter(c => c.status === 'resolved').length,
-      pending: mockComplaints.filter(c => c.status === 'pending').length,
-      inProgress: mockComplaints.filter(c => c.status === 'in_progress').length
-    });
+      try {
+        const [complaints, statsData] = await Promise.all([
+          getUserComplaints(user.id),
+          getComplaintStats(user.id)
+        ]);
 
-    // Check if there's a recent complaint submission (within last 24 hours)
-    const now = new Date();
-    const recentSubmission = mockComplaints.find(complaint => {
-      const complaintTime = new Date(complaint.createdAt);
-      const hoursDiff = (now - complaintTime) / (1000 * 60 * 60);
-      return hoursDiff <= 24 && (complaint.status === 'registered' || complaint.status === 'pending');
-    });
-    
-    setHasRecentSubmission(!!recentSubmission);
-    
-    // Check if user just submitted a complaint (from localStorage)
-    const complaintSubmitted = localStorage.getItem('complaintSubmitted');
-    const complaintSubmittedTime = localStorage.getItem('complaintSubmittedTime');
-    
-    console.log('Checking localStorage:', { complaintSubmitted, complaintSubmittedTime });
-    
-    if (complaintSubmitted === 'true' && complaintSubmittedTime) {
-      const submissionTime = new Date(complaintSubmittedTime);
-      const timeDiff = (now - submissionTime) / (1000 * 60 * 60); // hours
-      
-      console.log('Complaint submission found:', { submissionTime, timeDiff });
-      
-      // Show progress bar if complaint was submitted within last 24 hours
-      if (timeDiff <= 24) {
-        console.log('Showing progress bar');
-        setShowProgressBar(true);
-        // Progress bar stays visible until page refresh or navigation
+        // Transform complaints to match expected format
+        const transformedComplaints = complaints.map(complaint => ({
+          id: complaint.id,
+          title: `${complaint.category} - ${complaint.address?.split(',')[0] || 'Location'}`,
+          description: complaint.description,
+          status: complaint.status,
+          priority: complaint.priority,
+          category: complaint.category,
+          location: complaint.address,
+          createdAt: new Date(complaint.created_at),
+          resolvedAt: complaint.resolved_at ? new Date(complaint.resolved_at) : null,
+          image: complaint.image_url
+        }));
+
+        setRecentComplaints(transformedComplaints);
+        setStats({
+          total: statsData.total,
+          resolved: statsData.resolved,
+          pending: statsData.pending,
+          inProgress: statsData.inProgress
+        });
+
+        // Check if there's a recent complaint submission (within last 24 hours)
+        const now = new Date();
+        const recentSubmission = transformedComplaints.find(complaint => {
+          const complaintTime = new Date(complaint.createdAt);
+          const hoursDiff = (now - complaintTime) / (1000 * 60 * 60);
+          return hoursDiff <= 24 && (complaint.status === 'pending' || complaint.status === 'in_progress');
+        });
+        
+        setHasRecentSubmission(!!recentSubmission);
+        
+        // Check if user just submitted a complaint (from localStorage)
+        const complaintSubmitted = localStorage.getItem('complaintSubmitted');
+        const complaintSubmittedTime = localStorage.getItem('complaintSubmittedTime');
+        
+        if (complaintSubmitted === 'true' && complaintSubmittedTime) {
+          const submissionTime = new Date(complaintSubmittedTime);
+          const timeDiff = (now - submissionTime) / (1000 * 60 * 60); // hours
+          
+          // Show progress bar if complaint was submitted within last 24 hours
+          if (timeDiff <= 24) {
+            setShowProgressBar(true);
+          }
+          
+          // Clear the localStorage flag after a delay
+          setTimeout(() => {
+            localStorage.removeItem('complaintSubmitted');
+            localStorage.removeItem('complaintSubmittedTime');
+          }, 1000);
+        } else {
+          setShowProgressBar(false);
+        }
+      } catch (error) {
+        console.error('Error loading complaints:', error);
+        toast.error('Failed to load complaints');
       }
-      
-      // Clear the localStorage flag after a delay to ensure progress bar shows
-      setTimeout(() => {
-        localStorage.removeItem('complaintSubmitted');
-        localStorage.removeItem('complaintSubmittedTime');
-        console.log('Cleared localStorage flags');
-      }, 1000);
-    } else {
-      console.log('No recent complaint submission found');
-      setShowProgressBar(false);
-    }
-  }, []);
+    };
+
+    loadComplaints();
+  }, [user]);
 
   const getStatusColor = (status) => {
     switch (status) {

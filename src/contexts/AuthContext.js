@@ -1,6 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
+// Generate UUID v4
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 const AuthContext = createContext();
 
 export const useAuth = () => {
@@ -20,7 +29,14 @@ export const AuthProvider = ({ children }) => {
     const savedUser = localStorage.getItem('urbansetu-user');
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsedUser = JSON.parse(savedUser);
+        // Migrate old timestamp IDs to UUID format
+        if (parsedUser.id && !parsedUser.id.includes('-')) {
+          // Old format detected (timestamp), generate new UUID
+          parsedUser.id = generateUUID();
+          localStorage.setItem('urbansetu-user', JSON.stringify(parsedUser));
+        }
+        setUser(parsedUser);
       } catch (error) {
         console.error('Error parsing saved user:', error);
         localStorage.removeItem('urbansetu-user');
@@ -38,7 +54,7 @@ export const AuthProvider = ({ children }) => {
       
       // Mock user data - replace with actual user data from API
       const mockUser = {
-        id: Date.now().toString(),
+        id: generateUUID(), // Generate proper UUID
         email,
         name: email.split('@')[0],
         userType,
@@ -68,7 +84,7 @@ export const AuthProvider = ({ children }) => {
       
       // Mock user data - replace with actual user data from API
       const mockUser = {
-        id: Date.now().toString(),
+        id: generateUUID(), // Generate proper UUID
         ...userData,
         avatar: `https://ui-avatars.com/api/?name=${userData.name}&background=48bb78&color=fff`,
         createdAt: new Date().toISOString(),

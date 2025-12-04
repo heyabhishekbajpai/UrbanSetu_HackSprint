@@ -21,6 +21,8 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import GoogleMap from '../common/GoogleMap';
+import { uploadImage, submitComplaint } from '../../services/complaintService';
+import toast from 'react-hot-toast';
 
 // AI Model Integration
 const AI_MODEL_URL = '/models/';
@@ -535,35 +537,60 @@ const ReportComplaint = () => {
   // Submit form
   const onSubmit = async (data) => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsProcessing(true);
       
+      // 1. Upload image to Supabase Storage
+      let imageUrl = null;
+      if (capturedImage) {
+        try {
+          // Convert base64 to File object
+          const response = await fetch(capturedImage);
+          const blob = await response.blob();
+          const file = new File([blob], 'complaint-image.jpg', { type: 'image/jpeg' });
+          
+          imageUrl = await uploadImage(file, user.id);
+        } catch (imageError) {
+          console.error('Error uploading image:', imageError);
+          toast.error('Failed to upload image. Submitting complaint without image...');
+        }
+      }
+
+      // 2. Prepare complaint data for Supabase
       const complaintData = {
-        ...data,
-        image: capturedImage,
-        aiPrediction: aiPrediction,
-        userId: user.id,
-        createdAt: new Date().toISOString(),
+        user_id: user.id,
+        category: data.category,
+        description: data.description,
+        priority: data.priority,
+        department: data.department || DEPARTMENT_MAPPING[data.category],
+        address: data.address || currentAddress || 'Address not available',
+        latitude: parseFloat(data.latitude || currentLocation?.lat || 0),
+        longitude: parseFloat(data.longitude || currentLocation?.lng || 0),
+        image_url: imageUrl,
+        ai_prediction: aiPrediction ? {
+          predictedClass: aiPrediction.className,
+          confidence: aiPrediction.probability,
+          allPredictions: aiPrediction.allPredictions || []
+        } : null,
+        ai_confidence: aiPrediction?.probability || null,
         status: 'pending'
       };
+
+      // 3. Submit to Supabase
+      await submitComplaint(complaintData);
       
-      console.log('Complaint submitted:', complaintData);
-      console.log('Complaint submitted successfully!');
+      toast.success('Complaint submitted successfully!');
       
       // Store complaint submission flag in localStorage to trigger progress bar
       const submissionTime = new Date().toISOString();
       localStorage.setItem('complaintSubmitted', 'true');
       localStorage.setItem('complaintSubmittedTime', submissionTime);
       
-      console.log('Stored localStorage flags:', {
-        complaintSubmitted: localStorage.getItem('complaintSubmitted'),
-        complaintSubmittedTime: localStorage.getItem('complaintSubmittedTime')
-      });
-      
       navigate('/citizen');
     } catch (error) {
       console.error('Error submitting complaint:', error);
-      console.error('Failed to submit complaint');
+      toast.error(error.message || 'Failed to submit complaint. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 

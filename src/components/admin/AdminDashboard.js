@@ -24,6 +24,8 @@ import L from 'leaflet';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { format } from 'date-fns';
+import { getAllComplaints, updateComplaintStatus } from '../../services/complaintService';
+import toast from 'react-hot-toast';
 
 // Create custom red markers
 const createRedIcon = () => {
@@ -72,117 +74,63 @@ const AdminDashboard = () => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Map data for Lucknow with 4 random pins
-  const mapPins = [
-    {
-      id: 1,
-      position: [26.8467, 80.9462], // Lucknow center
-      title: 'Pothole Complaint',
-      description: 'Large pothole on main road causing traffic issues',
-      status: 'pending',
-      priority: 'high'
-    },
-    {
-      id: 2,
-      position: [26.8523, 80.9345], // Gomti Nagar area
-      title: 'Street Light Issue',
-      description: 'Broken street light near park area',
-      status: 'in_progress',
-      priority: 'medium'
-    },
-    {
-      id: 3,
-      position: [26.8389, 80.9556], // Hazratganj area
-      title: 'Garbage Collection',
-      description: 'Garbage not being collected regularly',
-      status: 'resolved',
-      priority: 'high'
-    },
-    {
-      id: 4,
-      position: [26.8615, 80.9234], // Alambagh area
-      title: 'Sewage Overflow',
-      description: 'Sewage water overflowing on the street',
-      status: 'pending',
-      priority: 'urgent'
-    }
-  ];
+  // Map pins generated from complaints data
+  const mapPins = complaints.map(complaint => ({
+    id: complaint.id,
+    position: [complaint.latitude || 26.8467, complaint.longitude || 80.9462],
+    title: complaint.title,
+    description: complaint.description,
+    status: complaint.status,
+    priority: complaint.priority
+  }));
 
-  // Mock data - replace with actual API calls
+  // Load complaints from Supabase
   useEffect(() => {
     const loadData = async () => {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const mockComplaints = [
-        {
-          id: '1',
-          title: 'Pothole on Main Road',
-          description: 'Large pothole causing traffic issues',
-          status: 'pending',
-          priority: 'high',
-          category: 'Pothole',
-          department: 'Road Authority',
-          location: 'Main Road, Sector 15',
-          reporter: 'Priya Sharma',
-          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-          image: 'https://raw.githubusercontent.com/heyabhishekbajpai/UrbanSetu/main/public/pothole.jpg'
-        },
-        {
-          id: '2',
-          title: 'Broken Street Light',
-          description: 'Street light not working near park',
-          status: 'in_progress',
-          priority: 'medium',
-          category: 'StreetLight',
-          department: 'Electrical Department',
-          location: 'Park Road, Sector 12',
-          reporter: 'Rajesh Kumar',
-          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-          image: 'https://raw.githubusercontent.com/heyabhishekbajpai/UrbanSetu/main/public/streetlight.jpg'
-        },
-        {
-          id: '3',
-          title: 'Garbage Accumulation',
-          description: 'Garbage not being collected regularly',
-          status: 'resolved',
-          priority: 'high',
-          category: 'Garbage',
-          department: 'Sanitation Department',
-          location: 'Residential Area, Sector 8',
-          reporter: 'Anita Singh',
-          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-          image: 'https://raw.githubusercontent.com/heyabhishekbajpai/UrbanSetu/main/public/garbage.png'
-        },
-        {
-          id: '4',
-          title: 'Sewage Overflow',
-          description: 'Sewage water overflowing on the street',
-          status: 'pending',
-          priority: 'urgent',
-          category: 'Sewage',
-          department: 'Water & Sewage Board',
-          location: 'Market Area, Sector 5',
-          reporter: 'Vikram Patel',
-          createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-          image: 'https://raw.githubusercontent.com/heyabhishekbajpai/UrbanSetu/main/public/water.jpg'
-        }
-      ];
+      try {
+        const complaintsData = await getAllComplaints({
+          status: selectedFilter !== 'all' ? selectedFilter : undefined,
+          search: searchQuery
+        });
 
-      setComplaints(mockComplaints);
-      setStats({
-        total: mockComplaints.length,
-        pending: mockComplaints.filter(c => c.status === 'pending').length,
-        inProgress: mockComplaints.filter(c => c.status === 'in_progress').length,
-        resolved: mockComplaints.filter(c => c.status === 'resolved').length,
-        today: mockComplaints.filter(c => 
-          new Date(c.createdAt).toDateString() === new Date().toDateString()
-        ).length
-      });
+        // Transform complaints to match expected format
+        const transformedComplaints = complaintsData.map(complaint => ({
+          id: complaint.id,
+          title: `${complaint.category} - ${complaint.address?.split(',')[0] || 'Location'}`,
+          description: complaint.description,
+          status: complaint.status,
+          priority: complaint.priority,
+          category: complaint.category,
+          department: complaint.department,
+          location: complaint.address,
+          reporter: 'User', // You can join with users table later to get actual name
+          createdAt: new Date(complaint.created_at),
+          image: complaint.image_url,
+          latitude: complaint.latitude,
+          longitude: complaint.longitude
+        }));
+
+        setComplaints(transformedComplaints);
+        
+        // Calculate stats
+        const today = new Date().toDateString();
+        setStats({
+          total: transformedComplaints.length,
+          pending: transformedComplaints.filter(c => c.status === 'pending').length,
+          inProgress: transformedComplaints.filter(c => c.status === 'in_progress').length,
+          resolved: transformedComplaints.filter(c => c.status === 'resolved').length,
+          today: transformedComplaints.filter(c => 
+            new Date(c.createdAt).toDateString() === today
+          ).length
+        });
+      } catch (error) {
+        console.error('Error loading complaints:', error);
+        toast.error('Failed to load complaints');
+      }
     };
 
     loadData();
-  }, []);
+  }, [selectedFilter, searchQuery]);
 
   const getStatusColor = (status) => {
     switch (status) {
