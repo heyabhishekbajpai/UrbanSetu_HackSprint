@@ -139,7 +139,7 @@ npm run build
 
 For support and questions:
 - **Email**: bajpai.connect@gmail.com
-- **Documentation**: [click here](https://drive.google.com/file/d/1umABX31xuKR2Cy4fa7106CNS9N19wepO/view)
+- **Documentation**: [click here](https://drive.google.com/file/d/1dJetFd1A4ot03RFkCjitdEE-F-FeetxI/view?usp=sharing)
 
 ---
 
